@@ -54,53 +54,85 @@ tempScript = sys.argv[3]
 kernelVersion = sys.argv[4]
 file_name = sys.argv[5]
 abi_map = {"x64": "x86_64", "arm64": "arm64"}
+target = download_dir / file_name
+
+# Phase 1: Try GitHub releases for pre-built WSA kernel
 print(
     f"Generating KernelSU download link: arch={abi_map[arch]}, kernel version={kernelVersion}", flush=True)
-res = requests.get(
-    f"https://api.github.com/repos/tiann/KernelSU/releases/latest")
-json_data = json.loads(res.content)
-headers = res.headers
-x_ratelimit_remaining = headers["x-ratelimit-remaining"]
-kernel_ver = 0
-if res.status_code == 200:
+try:
+    res = requests.get(
+        f"https://api.github.com/repos/tiann/KernelSU/releases/latest")
+    json_data = json.loads(res.content)
+    headers = res.headers
+    x_ratelimit_remaining = headers.get("x-ratelimit-remaining", "")
+    kernel_ver = "0"
     link = ""
-    assets = json_data["assets"]
-    for asset in assets:
-        asset_name = asset["name"]
-        if re.match(rf'kernel-WSA-{abi_map[arch]}-{kernelVersion}.*\.zip$', asset_name) and asset["content_type"] == "application/zip":
-            tmp_kernel_ver = re.search(
-                u'\d{1}.\d{1,}.\d{1,}.\d{1,}', asset_name.split("-")[3]).group()
-            if (kernel_ver == 0):
-                kernel_ver = tmp_kernel_ver
-            elif version.parse(kernel_ver) < version.parse(tmp_kernel_ver):
-                kernel_ver = tmp_kernel_ver
-    print(f"Kernel version: {kernel_ver}", flush=True)
-    for asset in assets:
-        if re.match(rf'kernel-WSA-{abi_map[arch]}-{kernel_ver}.*\.zip$', asset["name"]) and asset["content_type"] == "application/zip":
-            link = asset["browser_download_url"]
-            break
-    if link == "":
-        print(
-            f"Error: No KernelSU release found for arch={abi_map[arch]}, kernel version={kernelVersion}", flush=True)
-        exit(1)
-    release_name = json_data["name"]
-    with open(os.environ['WSA_WORK_ENV'], 'r') as environ_file:
-        env = Prop(environ_file.read())
-        env.KERNELSU_VER = release_name
-    with open(os.environ['WSA_WORK_ENV'], 'w') as environ_file:
-        environ_file.write(str(env))
-elif res.status_code == 403 and x_ratelimit_remaining == '0':
-    message = json_data["message"]
-    print(f"Github API Error: {message}", flush=True)
-    ratelimit_reset = headers["x-ratelimit-reset"]
-    ratelimit_reset = datetime.fromtimestamp(int(ratelimit_reset))
+    if res.status_code == 200:
+        assets = json_data.get("assets", [])
+        for asset in assets:
+            asset_name = asset["name"]
+            if re.match(r'kernel-WSA-' + abi_map[arch] + '-' + kernelVersion + r'.*\.zip$', asset_name) and asset["content_type"] == "application/zip":
+                tmp_kernel_ver = re.search(
+                    r'\d{1}\.\d{1,}\.\d{1,}\.\d{1,}', asset_name.split("-")[3]).group()
+                if kernel_ver == "0":
+                    kernel_ver = tmp_kernel_ver
+                elif version.parse(kernel_ver) < version.parse(tmp_kernel_ver):
+                    kernel_ver = tmp_kernel_ver
+        print(f"Kernel version: {kernel_ver}", flush=True)
+        for asset in assets:
+            if re.match(r'kernel-WSA-' + abi_map[arch] + '-' + kernel_ver + r'.*\.zip$', asset["name"]) and asset["content_type"] == "application/zip":
+                link = asset["browser_download_url"]
+                break
+    if link:
+        release_name = json_data["name"]
+        with open(os.environ['WSA_WORK_ENV'], 'r') as environ_file:
+            env = Prop(environ_file.read())
+            env.KERNELSU_VER = release_name
+        with open(os.environ['WSA_WORK_ENV'], 'w') as environ_file:
+            environ_file.write(str(env))
+        print(f"download link: {link}", flush=True)
+        with open(download_dir / tempScript, 'a') as f:
+            f.writelines(f'{link}\n')
+            f.writelines(f'  dir={download_dir}\n')
+            f.writelines(f'  out={file_name}\n')
+        exit(0)
+except Exception as e:
+    print(f"GitHub API error: {e}", flush=True)
+
+# Phase 2: Custom fallback - look for kernel-WSA-*.zip in download directory
+print("No WSA kernel found in GitHub releases. Trying custom kernel...", flush=True)
+found = False
+for f in sorted(download_dir.iterdir()):
+    if f.is_file() and f.name.startswith("kernel-WSA-") and f.name.endswith(".zip"):
+        print(f"Found custom kernel: {f.name}", flush=True)
+        if f.resolve() != target.resolve():
+            f.rename(target)
+        found = True
+        break
+
+if not found:
+    # Fallback: kernelsu.zip
+    fallback = download_dir / "kernelsu.zip"
+    if fallback.exists():
+        print(f"Using fallback: kernelsu.zip", flush=True)
+        if fallback.resolve() != target.resolve():
+            fallback.rename(target)
+        found = True
+
+if not found:
     print(
-        f"The current rate limit window resets in {ratelimit_reset}", flush=True)
+        f"Error: No KernelSU kernel found. Place kernel-WSA-{abi_map[arch]}-{kernelVersion}.zip "
+        f"or kernelsu.zip in {download_dir}. The zip must contain a kernel file (bzImage for x64, Image for arm64).",
+        flush=True)
     exit(1)
 
-print(f"download link: {link}", flush=True)
+# Custom mode: set version and skip aria2c (no conf file entry)
+release_name = "custom"
+with open(os.environ['WSA_WORK_ENV'], 'r') as environ_file:
+    env = Prop(environ_file.read())
+    env.KERNELSU_VER = release_name
+with open(os.environ['WSA_WORK_ENV'], 'w') as environ_file:
+    environ_file.write(str(env))
 
-with open(download_dir/tempScript, 'a') as f:
-    f.writelines(f'{link}\n')
-    f.writelines(f'  dir={download_dir}\n')
-    f.writelines(f'  out={file_name}\n')
+print(f"Custom kernel ready: {target.name}", flush=True)
+# Do NOT write to aria2c conf - file is already local

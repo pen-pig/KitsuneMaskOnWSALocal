@@ -38,19 +38,7 @@
 
     No need to type any commands.
 
-## Features
-
-- Integrate Magisk and GApps in a few clicks within minutes
-- Keep each build up to date
-- Support both ARM64 and x64
-- Support MindTheGapps
-- Remove Amazon Appstore
-- Fix VPN dialog not showing (use our [VpnDialogs app](https://github.com/LSPosed/VpnDialogs))
-- Add device administration feature
-- Unattended installation
-- Automatically activates developers mode in Windows 11
-- Update to the new version while preserving data with a one-click script
-- Merged all language packs
+Add more root methods to MagiskOnWSA.
 
 ## Text Guide
 
@@ -64,12 +52,18 @@
 3. Run `cd MagiskOnWSALocal`.
 4. Run `./scripts/run.sh`.
 5. Select the WSA version and its architecture (mostly x64).
-6. Select the version of Magisk.
+6. Select the version of Magisk (stable, beta, canary, debug). For custom Magisk forks, choose the custom option and place your APK as `app-<fork>.apk` in the project root's `apks/` directory (e.g., `app-kitsune.apk` for Kitsune Mask, `app-alpha.apk` for Magisk Alpha).
 7. Choose which brand of GApps you want to install:
    - MindTheGapps
 
      There is no other variant we can choose.
-8. Select the root solution (none means no root).
+8. Select the root solution:
+   - `none`: No root.
+   - `magisk`: Standard Magisk root (supports custom forks via `--magisk-custom`).
+   - `kernelsu`: KernelSU — kernel-based root (x86_64 compatible on WSA). Requires a pre-patched kernel image in the `download/` directory.
+   - `sukisu`: SuKiSU — kernel-based root (x86_64 compatible on WSA). Requires a pre-patched kernel image in the `download/` directory.
+   
+   **Note**: Kernel-based root solutions (KernelSU, SuKiSU) are incompatible with GApps.
 9. If you are running the script for the first time, it will take some time to complete. After the script completes, two new folders named `output` and `download` will be generated in the `MagiskOnWSALocal` folder. Go to the `output` folder. While running the `./run.sh` script in the step 3, if you selected `Yes` for `Do you want to compress the output?` then in `output` folder you will see a compressed file called `WSA-with-magisk-stable-MindTheGapps_2207.40000.8.0_x64_Release-Nightly`or else there will be folder with the `WSA-with-magisk-stable-MindTheGapps_2207.40000.8.0_x64_Release-Nightly`. If there is a folder open it and skip to step 10. NOTE: The name of compressed file or the folder generated in the `output` folder may be different for you. It will be dependent on the choices made when executing `./run.sh`.
 10. Extract the compressed file and open the folder created after the extraction of the file.
 11. Here look for file `Run.bat` and run it.
@@ -135,7 +129,7 @@
 
 - Can I use Magisk v23.0 stable or a lower version?
 
-  No. Magisk has bugs preventing itself from running on WSA. Magisk v24+ has fixed them. So you must use Magisk v24 or later.
+  No. Magisk has bugs preventing itself from running on WSA. Magisk v24+ has fixed them. So you must use Magisk v24 or later. Kitsune Mask and Magisk Alpha are also supported via the custom Magisk option.
 
 - How can I get rid of Magisk?
 
@@ -159,9 +153,13 @@
 
   It has no effect on the user data partition. Check the logs if there is a failure to boot.
 
-- How to install KernelSU?
+- How to install KernelSU or SuKiSU?
 
-  [Tutorial](KernelSU.md)
+  [Tutorial](KernelSU.md). Both KernelSU and SuKiSU are kernel-based root solutions that work on WSA x86_64. Place the pre-patched kernel image in the `download/` directory before running the build script. Note that kernel-based root solutions are incompatible with GApps.
+
+- What about APatch?
+
+  [APatch](https://github.com/bmax121/APatch) only supports ARM64 architecture at this time and is not available for WSA x86_64.
 
 </details>
 
@@ -171,10 +169,11 @@
 
 - [StoreLib](https://github.com/StoreDev/StoreLib): API for downloading WSA
 - [Magisk](https://github.com/topjohnwu/Magisk): The most famous root solution on Android
-- ~~[The Open GApps Project](https://opengapps.org): One of the most famous Google Apps packages solution~~
+- [Kitsune Mask](https://github.com/HuskyDG/magisk-files): Magisk fork with extended features
+- [Magisk Alpha](https://github.com/vvb2060/Magisk): Alternative Magisk distribution
+- [KernelSU](https://github.com/tiann/KernelSU): Kernel-based root solution for Android
+- [SuKiSU](https://github.com/ShirkNeko/SuKiSU): Kernel-based su for Android
 - [WSA-Kernel-SU](https://github.com/LSPosed/WSA-Kernel-SU) and [kernel-assisted-superuser](https://git.zx2c4.com/kernel-assisted-superuser/): The kernel `su` for debugging Magisk Integration
-- ~~[WSAGAScript](https://github.com/ADeltaX/WSAGAScript): The first GApps integration script for WSA~~
-- ~~[erofs-utils](https://github.com/sekaiacg/erofs-utils): Pre-build `erofs-utils` with erofsfuse enabled~~
 
 _The repository is provided as a utility._
 

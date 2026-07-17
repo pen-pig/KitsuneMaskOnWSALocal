@@ -120,11 +120,15 @@ MAGISK_VER_MAP=(
     "canary"
     "debug"
     "release"
+    "kitsune"
+    "alpha"
 )
 
 ROOT_SOL_MAP=(
     "magisk"
     "kernelsu"
+    "sukisu"
+    "apatch"
     "none"
 )
 
@@ -306,8 +310,8 @@ if [ "$HAS_GAPPS" ]; then
             ROOT_SOL="magisk"
             echo "WARN: Force install Magisk since GApps needs it to mount the file"
             ;;
-        "kernelsu")
-            abort "Unsupported combination: Install GApps and KernelSU"
+        "kernelsu"|"sukisu"|"apatch")
+            abort "Unsupported combination: Install GApps and $ROOT_SOL"
             ;;
         *)
             ;;
@@ -331,13 +335,16 @@ MAGISK_ZIP=magisk-$MAGISK_VER.zip
 MAGISK_PATH=$DOWNLOAD_DIR/$MAGISK_ZIP
 CUST_PATH="$DOWNLOAD_DIR/cust.img"
 if [ "$CUSTOM_MAGISK" ]; then
+    CUSTOM_APKS_DIR="$SCRIPT_DIR/../apks"
+    CUSTOM_APK=app-$MAGISK_VER.apk
+    MAGISK_PATH="$CUSTOM_APKS_DIR/$CUSTOM_APK"
     if [ ! -f "$MAGISK_PATH" ]; then
-        echo "Custom Magisk $MAGISK_ZIP not found"
-        MAGISK_ZIP=app-$MAGISK_VER.apk
+        echo "Custom Magisk $CUSTOM_APK not found in $CUSTOM_APKS_DIR"
+        MAGISK_ZIP=magisk-$MAGISK_VER.zip
         echo -e "Fallback to $MAGISK_ZIP\n"
-        MAGISK_PATH=$DOWNLOAD_DIR/$MAGISK_ZIP
+        MAGISK_PATH="$CUSTOM_APKS_DIR/$MAGISK_ZIP"
         if [ ! -f "$MAGISK_PATH" ]; then
-            abort "Custom Magisk $MAGISK_ZIP not found\nPlease put custom Magisk in $DOWNLOAD_DIR"
+            abort "Custom Magisk not found\nPlease put app-$MAGISK_VER.apk or magisk-$MAGISK_VER.zip in $CUSTOM_APKS_DIR"
         fi
     fi
 fi
@@ -417,9 +424,21 @@ if [ -z ${OFFLINE+x} ]; then
             python3 generateMagiskLink.py "$MAGISK_VER" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
         fi
     fi
-    if [ "$ROOT_SOL" = "kernelsu" ]; then
+    if [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ]; then
         update_ksu_zip_name
-        python3 generateKernelSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || abort
+        if [ "$ROOT_SOL" = "kernelsu" ]; then
+            python3 generateKernelSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || abort
+        else
+            python3 generateSuKiSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || abort
+        fi
+        # shellcheck disable=SC1090
+        source "$WSA_WORK_ENV" || abort
+        # shellcheck disable=SC2153
+        echo "KERNELSU_VER=$KERNELSU_VER" >"$KERNELSU_INFO"
+    fi
+    if [ "$ROOT_SOL" = "apatch" ]; then
+        update_ksu_zip_name
+        python3 generateAPatchLink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || abort
         # shellcheck disable=SC1090
         source "$WSA_WORK_ENV" || abort
         # shellcheck disable=SC2153
@@ -442,7 +461,7 @@ declare -A FILES_CHECK_LIST=([xaml_PATH]="$xaml_PATH" [vclibs_PATH]="$vclibs_PAT
 if [ "$ROOT_SOL" = "magisk" ]; then
     FILES_CHECK_LIST+=(["MAGISK_PATH"]="$MAGISK_PATH" ["CUST_PATH"]="$CUST_PATH")
 fi
-if [ "$ROOT_SOL" = "kernelsu" ]; then
+if [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
     update_ksu_zip_name
     FILES_CHECK_LIST+=(["KERNELSU_PATH"]="$KERNELSU_PATH")
 fi
@@ -517,7 +536,7 @@ if [ "$ROOT_SOL" = "magisk" ]; then
         "add 000 overlay.d/sbin/post-fs-data.sh post-fs-data.sh" \
         "add 000 overlay.d/sbin/lsp_cust.img $CUST_PATH" \
         || abort "Unable to patch initrd"
-elif [ "$ROOT_SOL" = "kernelsu" ]; then
+elif [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
     echo "Extracting KernelSU"
     # shellcheck disable=SC1090
     source "${KERNELSU_INFO:?}" || abort
@@ -571,7 +590,7 @@ if [[ "$ROOT_SOL" = "none" ]]; then
     name1=""
 elif [ "$ROOT_SOL" = "magisk" ]; then
     name1="-with-magisk-$MAGISK_VERSION_NAME($MAGISK_VERSION_CODE)-$MAGISK_VER"
-elif [ "$ROOT_SOL" = "kernelsu" ]; then
+elif [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
     name1="-with-$ROOT_SOL-$KERNELSU_VER"
 fi
 if [ -z "$HAS_GAPPS" ]; then
