@@ -84,10 +84,15 @@ if (YesNoBox '([title]="Root" [text]="Do you want to Root WSA?")'); then
                     [default]="magisk")' \
             'magisk' "Magisk" 'on' \
             'kernelsu' "KernelSU" 'off' \
-            'sukisu' "SuKisu (KernelSU-Next)" 'off' \
+            'sukisu' "SuKiSU-Ultra" 'off' \
             'apatch' "APatch (put apatch.zip in download/)" 'off'
     )
     COMMAND_LINE+=(--root-sol "$ROOT_SOL")
+if [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
+    if (YesNoBox '([title]="Auto-create custom kernel" [text]="No pre-built kernel found?\nAuto-download kernel from WSABuilds and package it.")'); then
+        COMMAND_LINE+=(--auto-kernel)
+    fi
+fi
 else
     COMMAND_LINE+=(--root-sol "none")
 fi

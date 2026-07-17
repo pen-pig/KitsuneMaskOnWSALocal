@@ -28,6 +28,7 @@ if [ "$HOST_ARCH" != "x86_64" ] && [ "$HOST_ARCH" != "aarch64" ]; then
     exit 1
 fi
 cd "$(dirname "$0")" || exit 1
+SCRIPT_DIR="$(pwd)"
 # export TMPDIR=$HOME/.cache/wsa
 if [ "$TMPDIR" ] && [ ! -d "$TMPDIR" ]; then
     mkdir -p "$TMPDIR"
@@ -178,6 +179,7 @@ Usage:
 
 Additional Options:
     --offline           Build WSA offline
+    --auto-kernel       Auto-download WSA kernel from WSABuilds if no pre-built kernel found
     --magisk-custom     Install custom Magisk
     --skip-download-wsa Skip download WSA
     --help              Show this help message and exit
@@ -202,6 +204,7 @@ ARGUMENT_LIST=(
     "remove-amazon"
     "offline"
     "skip-download-wsa"
+    "auto-kernel"
     "help"
     "debug"
 )
@@ -257,6 +260,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-download-wsa)
             SKIP_DOWN_WSA=1
+            shift
+            ;;
+
+        --auto-kernel)
+            AUTO_KERNEL=1
             shift
             ;;
         --help)
@@ -427,10 +435,27 @@ if [ -z ${OFFLINE+x} ]; then
     if [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ]; then
         update_ksu_zip_name
         if [ "$ROOT_SOL" = "kernelsu" ]; then
-            python3 generateKernelSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || abort
+            python3 generateKernelSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || KSU_FAILED=1
         else
-            python3 generateSuKiSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || abort
+            python3 generateSuKiSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || KSU_FAILED=1
         fi
+        if [ "$KSU_FAILED" ] && [ "$AUTO_KERNEL" ]; then
+            echo "Auto-creating custom kernel from WSABuilds..."
+            KSU_WSABUILDS_URL="https://github.com/MustardChef/WSABuilds/releases/download/Windows_11_2407.40000.4.0_LTS_7_HOTFIX_1/WSA_2407.40000.4.0_x64_Release-Nightly-with-KernelSU-v2.1.2-MindTheGapps-13.0-RemovedAmazon.7z"
+            aria2c --no-conf -x4 -s4 -c -R -m0 -d"$DOWNLOAD_DIR" -o"wsa-kernel-temp.7z" "$KSU_WSABUILDS_URL" || abort "Failed to download kernel from WSABuilds"
+            mkdir -p "$DOWNLOAD_DIR/kernel-extract"
+            7z x "$DOWNLOAD_DIR/wsa-kernel-temp.7z" -o"$DOWNLOAD_DIR/kernel-extract" "*/Tools/kernel" -y || abort "Failed to extract kernel"
+            KERNEL_FILE=$(find "$DOWNLOAD_DIR/kernel-extract" -name kernel -type f | head -1)
+            if [ ! -f "$KERNEL_FILE" ]; then
+                abort "Kernel not found in WSABuilds archive"
+            fi
+            (cd "$(dirname "$KERNEL_FILE")" && zip -r "$KERNELSU_PATH" kernel)
+            rm -rf "$DOWNLOAD_DIR/kernel-extract" "$DOWNLOAD_DIR/wsa-kernel-temp.7z"
+            KERNELSU_VER="WSABuilds-custom"
+        elif [ "$KSU_FAILED" ]; then
+            abort "No SuKiSU/KernelSU kernel found. Use --auto-kernel to auto-download from WSABuilds."
+        fi
+
         # shellcheck disable=SC1090
         source "$WSA_WORK_ENV" || abort
         # shellcheck disable=SC2153
@@ -487,6 +512,7 @@ if [ "$ROOT_SOL" = "magisk" ]; then
             CLEAN_DOWNLOAD_MAGISK=1
             abort "Unzip Magisk failed, is the download incomplete?"
         fi
+
         # shellcheck disable=SC1090
         source "$WSA_WORK_ENV" || abort
         if [ "$MAGISK_VERSION_CODE" -lt 26000 ] && [ "$MAGISK_VER" != "stable" ] && [ -z ${CUSTOM_MAGISK+x} ]; then
