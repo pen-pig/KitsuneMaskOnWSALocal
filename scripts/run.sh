@@ -83,16 +83,10 @@ if (YesNoBox '([title]="Root" [text]="Do you want to Root WSA?")'); then
         Radiolist '([title]="Root solution"
                     [default]="magisk")' \
             'magisk' "Magisk" 'on' \
-            'kernelsu' "KernelSU" 'off' \
-            'sukisu' "SuKiSU-Ultra" 'off' \
-            'apatch' "APatch (put apatch.zip in download/)" 'off'
+            'kernelsu' "KernelSU v3.2.5" 'off' \
+            'sukisu' "SuKiSU v4.1.3" 'off'
     )
     COMMAND_LINE+=(--root-sol "$ROOT_SOL")
-if [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
-    if (YesNoBox '([title]="Auto-create custom kernel" [text]="No pre-built kernel found?\nAuto-download kernel from WSABuilds and package it.")'); then
-        COMMAND_LINE+=(--auto-kernel)
-    fi
-fi
 else
     COMMAND_LINE+=(--root-sol "none")
 fi
@@ -104,16 +98,9 @@ if [ "$ROOT_SOL" = "magisk" ]; then
             'stable' "Stable Channel" 'on' \
             'beta' "Beta Channel" 'off' \
             'canary' "Canary Channel" 'off' \
-            'debug' "Canary Channel Debug Build" 'off' \
-            'kitsune' "Kitsune Mask (put app-kitsune.apk in apks/)" 'off' \
-            'alpha' "Magisk Alpha (put app-alpha.apk in apks/)" 'off'
+            'debug' "Canary Channel Debug Build" 'off'
     )
     COMMAND_LINE+=(--magisk-ver "$MAGISK_VER")
-    case "$MAGISK_VER" in
-        kitsune|alpha)
-            COMMAND_LINE+=(--magisk-custom)
-            ;;
-    esac
     if (YesNoBox '([title]="Install GApps" [text]="Do you want to install GApps?")'); then
         COMMAND_LINE+=(--install-gapps)
     fi

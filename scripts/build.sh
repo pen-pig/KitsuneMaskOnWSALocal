@@ -28,7 +28,6 @@ if [ "$HOST_ARCH" != "x86_64" ] && [ "$HOST_ARCH" != "aarch64" ]; then
     exit 1
 fi
 cd "$(dirname "$0")" || exit 1
-SCRIPT_DIR="$(pwd)"
 # export TMPDIR=$HOME/.cache/wsa
 if [ "$TMPDIR" ] && [ ! -d "$TMPDIR" ]; then
     mkdir -p "$TMPDIR"
@@ -36,6 +35,7 @@ fi
 WORK_DIR=$(mktemp -d -t wsa-build-XXXXXXXXXX_) || exit 1
 
 DOWNLOAD_DIR=../download
+KERNEL_DIR=../kernel
 DOWNLOAD_CONF_NAME=download.list
 PYTHON_VENV_DIR="$(dirname "$PWD")/python3-env"
 
@@ -74,6 +74,10 @@ clean_download() {
         if [ "$CLEAN_DOWNLOAD_KERNELSU" ]; then
             rm -f "${KERNELSU_PATH:?}"
             rm -f "${KERNELSU_INFO:?}"
+        fi
+        if [ "$CLEAN_DOWNLOAD_SUKISU" ]; then
+            rm -f "${SUKISU_PATH:?}"
+            rm -f "${SUKISU_INFO:?}"
         fi
     fi
 }
@@ -121,15 +125,12 @@ MAGISK_VER_MAP=(
     "canary"
     "debug"
     "release"
-    "kitsune"
-    "alpha"
 )
 
 ROOT_SOL_MAP=(
     "magisk"
     "kernelsu"
     "sukisu"
-    "apatch"
     "none"
 )
 
@@ -179,7 +180,6 @@ Usage:
 
 Additional Options:
     --offline           Build WSA offline
-    --auto-kernel       Auto-download WSA kernel from WSABuilds if no pre-built kernel found
     --magisk-custom     Install custom Magisk
     --skip-download-wsa Skip download WSA
     --help              Show this help message and exit
@@ -204,7 +204,6 @@ ARGUMENT_LIST=(
     "remove-amazon"
     "offline"
     "skip-download-wsa"
-    "auto-kernel"
     "help"
     "debug"
 )
@@ -262,11 +261,6 @@ while [[ $# -gt 0 ]]; do
             SKIP_DOWN_WSA=1
             shift
             ;;
-
-        --auto-kernel)
-            AUTO_KERNEL=1
-            shift
-            ;;
         --help)
             usage
             exit 0
@@ -318,7 +312,7 @@ if [ "$HAS_GAPPS" ]; then
             ROOT_SOL="magisk"
             echo "WARN: Force install Magisk since GApps needs it to mount the file"
             ;;
-        "kernelsu"|"sukisu"|"apatch")
+        "kernelsu"|"sukisu")
             abort "Unsupported combination: Install GApps and $ROOT_SOL"
             ;;
         *)
@@ -343,16 +337,13 @@ MAGISK_ZIP=magisk-$MAGISK_VER.zip
 MAGISK_PATH=$DOWNLOAD_DIR/$MAGISK_ZIP
 CUST_PATH="$DOWNLOAD_DIR/cust.img"
 if [ "$CUSTOM_MAGISK" ]; then
-    CUSTOM_APKS_DIR="$SCRIPT_DIR/../apks"
-    CUSTOM_APK=app-$MAGISK_VER.apk
-    MAGISK_PATH="$CUSTOM_APKS_DIR/$CUSTOM_APK"
     if [ ! -f "$MAGISK_PATH" ]; then
-        echo "Custom Magisk $CUSTOM_APK not found in $CUSTOM_APKS_DIR"
-        MAGISK_ZIP=magisk-$MAGISK_VER.zip
+        echo "Custom Magisk $MAGISK_ZIP not found"
+        MAGISK_ZIP=app-$MAGISK_VER.apk
         echo -e "Fallback to $MAGISK_ZIP\n"
-        MAGISK_PATH="$CUSTOM_APKS_DIR/$MAGISK_ZIP"
+        MAGISK_PATH=$DOWNLOAD_DIR/$MAGISK_ZIP
         if [ ! -f "$MAGISK_PATH" ]; then
-            abort "Custom Magisk not found\nPlease put app-$MAGISK_VER.apk or magisk-$MAGISK_VER.zip in $CUSTOM_APKS_DIR"
+            abort "Custom Magisk $MAGISK_ZIP not found\nPlease put custom Magisk in $DOWNLOAD_DIR"
         fi
     fi
 fi
@@ -389,7 +380,7 @@ update_ksu_zip_name() {
         KERNEL_VER=$(getKernelVersion "$WORK_DIR/wsa/$ARCH/Tools/kernel")
     fi
     KERNELSU_ZIP_NAME=kernelsu-$ARCH-$KERNEL_VER.zip
-    KERNELSU_PATH=$DOWNLOAD_DIR/$KERNELSU_ZIP_NAME
+    KERNELSU_PATH=$KERNEL_DIR/$KERNELSU_ZIP_NAME
     KERNELSU_INFO="$KERNELSU_PATH.info"
 }
 
@@ -432,46 +423,14 @@ if [ -z ${OFFLINE+x} ]; then
             python3 generateMagiskLink.py "$MAGISK_VER" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
         fi
     fi
-    if [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ]; then
-        update_ksu_zip_name
-        if [ "$ROOT_SOL" = "kernelsu" ]; then
-            python3 generateKernelSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || KSU_FAILED=1
-        else
-            python3 generateSuKiSULink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || KSU_FAILED=1
-        fi
-        if [ "$KSU_FAILED" ] && [ "$AUTO_KERNEL" ]; then
-            echo "Auto-creating custom kernel from WSABuilds..."
-            if [ "$ARCH" = "x64" ]; then
-                KSU_WSABUILDS_URL="https://github.com/MustardChef/WSABuilds/releases/download/Windows_11_2407.40000.4.0_LTS_7_HOTFIX_1/WSA_2407.40000.4.0_x64_Release-Nightly-with-KernelSU-v2.1.2-MindTheGapps-13.0-RemovedAmazon.7z"
-            else
-                KSU_WSABUILDS_URL="https://github.com/MustardChef/WSABuilds/releases/download/Windows_11_2407.40000.4.0_LTS_7_arm64/WSA_2407.40000.4.0_arm64_Release-Nightly-with-KernelSU-v1.0.5-MindTheGapps-13.0-RemovedAmazon.7z"
-            fi
-            aria2c --no-conf -x4 -s4 -c -R -m0 -d"$DOWNLOAD_DIR" -o"wsa-kernel-temp.7z" "$KSU_WSABUILDS_URL" || abort "Failed to download kernel from WSABuilds"
-            mkdir -p "$DOWNLOAD_DIR/kernel-extract"
-            7z x "$DOWNLOAD_DIR/wsa-kernel-temp.7z" -o"$DOWNLOAD_DIR/kernel-extract" "*/Tools/kernel" -y || abort "Failed to extract kernel"
-            KERNEL_FILE=$(find "$DOWNLOAD_DIR/kernel-extract" -name kernel -type f | head -1)
-            if [ ! -f "$KERNEL_FILE" ]; then
-                abort "Kernel not found in WSABuilds archive"
-            fi
-            (cd "$(dirname "$KERNEL_FILE")" && zip -r "$KERNELSU_PATH" kernel)
-            rm -rf "$DOWNLOAD_DIR/kernel-extract" "$DOWNLOAD_DIR/wsa-kernel-temp.7z"
-            KERNELSU_VER="WSABuilds-custom"
-        elif [ "$KSU_FAILED" ]; then
-            abort "No SuKiSU/KernelSU kernel found. Use --auto-kernel to auto-download from WSABuilds."
-        fi
-
-        # shellcheck disable=SC1090
-        source "$WSA_WORK_ENV" || abort
-        # shellcheck disable=SC2153
-        echo "KERNELSU_VER=$KERNELSU_VER" >"$KERNELSU_INFO"
-    fi
-    if [ "$ROOT_SOL" = "apatch" ]; then
-        update_ksu_zip_name
-        python3 generateAPatchLink.py "$ARCH" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" "$KERNEL_VER" "$KERNELSU_ZIP_NAME" || abort
-        # shellcheck disable=SC1090
-        source "$WSA_WORK_ENV" || abort
-        # shellcheck disable=SC2153
-        echo "KERNELSU_VER=$KERNELSU_VER" >"$KERNELSU_INFO"
+    if [ "$ROOT_SOL" = "kernelsu" ]; then
+        KERNELSU_ZIP_NAME="kernel-WSA-${ARCH_NAME_MAP[$ARCH]}-ksu-v3.2.5.zip"
+        KERNELSU_PATH="$KERNEL_DIR/$KERNELSU_ZIP_NAME"
+        echo "INFO: Using custom kernel $KERNELSU_ZIP_NAME"
+    elif [ "$ROOT_SOL" = "sukisu" ]; then
+        SUKISU_ZIP_NAME="kernel-WSA-${ARCH_NAME_MAP[$ARCH]}-sukisu-v4.1.3.zip"
+        SUKISU_PATH="$KERNEL_DIR/$SUKISU_ZIP_NAME"
+        echo "INFO: Using custom kernel $SUKISU_ZIP_NAME"
     fi
     if [ "$HAS_GAPPS" ]; then
         update_gapps_files_name
@@ -490,9 +449,14 @@ declare -A FILES_CHECK_LIST=([xaml_PATH]="$xaml_PATH" [vclibs_PATH]="$vclibs_PAT
 if [ "$ROOT_SOL" = "magisk" ]; then
     FILES_CHECK_LIST+=(["MAGISK_PATH"]="$MAGISK_PATH" ["CUST_PATH"]="$CUST_PATH")
 fi
-if [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
-    update_ksu_zip_name
+if [ "$ROOT_SOL" = "kernelsu" ]; then
+    KERNELSU_ZIP_NAME="kernel-WSA-${ARCH_NAME_MAP[$ARCH]}-ksu-v3.2.5.zip"
+    KERNELSU_PATH="$KERNEL_DIR/$KERNELSU_ZIP_NAME"
     FILES_CHECK_LIST+=(["KERNELSU_PATH"]="$KERNELSU_PATH")
+elif [ "$ROOT_SOL" = "sukisu" ]; then
+    SUKISU_ZIP_NAME="kernel-WSA-${ARCH_NAME_MAP[$ARCH]}-sukisu-v4.1.3.zip"
+    SUKISU_PATH="$KERNEL_DIR/$SUKISU_ZIP_NAME"
+    FILES_CHECK_LIST+=(["SUKISU_PATH"]="$SUKISU_PATH")
 fi
 if [ "$HAS_GAPPS" ]; then
     update_gapps_files_name
@@ -516,7 +480,6 @@ if [ "$ROOT_SOL" = "magisk" ]; then
             CLEAN_DOWNLOAD_MAGISK=1
             abort "Unzip Magisk failed, is the download incomplete?"
         fi
-
         # shellcheck disable=SC1090
         source "$WSA_WORK_ENV" || abort
         if [ "$MAGISK_VERSION_CODE" -lt 26000 ] && [ "$MAGISK_VER" != "stable" ] && [ -z ${CUSTOM_MAGISK+x} ]; then
@@ -566,12 +529,8 @@ if [ "$ROOT_SOL" = "magisk" ]; then
         "add 000 overlay.d/sbin/post-fs-data.sh post-fs-data.sh" \
         "add 000 overlay.d/sbin/lsp_cust.img $CUST_PATH" \
         || abort "Unable to patch initrd"
-elif [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
-    echo "Extracting KernelSU"
-    # shellcheck disable=SC1090
-    source "${KERNELSU_INFO:?}" || abort
-    echo "WSA Kernel Version: $KERNEL_VER"
-    echo "KernelSU Version: $KERNELSU_VER"
+elif [ "$ROOT_SOL" = "kernelsu" ]; then
+    echo "Extracting KernelSU v3.2.5"
     if ! unzip "$KERNELSU_PATH" -d "$WORK_DIR/kernelsu"; then
         CLEAN_DOWNLOAD_KERNELSU=1
         abort "Unzip KernelSU failed, package is corrupted?"
@@ -584,6 +543,20 @@ elif [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL"
     echo "Integrate KernelSU"
     mv "$WORK_DIR/wsa/$ARCH/Tools/kernel" "$WORK_DIR/wsa/$ARCH/Tools/kernel_origin"
     cp "$WORK_DIR/kernelsu/kernel" "$WORK_DIR/wsa/$ARCH/Tools/kernel"
+elif [ "$ROOT_SOL" = "sukisu" ]; then
+    echo "Extracting SuKiSU v4.1.3"
+    if ! unzip "$SUKISU_PATH" -d "$WORK_DIR/sukisu"; then
+        CLEAN_DOWNLOAD_SUKISU=1
+        abort "Unzip SuKiSU failed, package is corrupted?"
+    fi
+    if [ "$ARCH" = "x64" ]; then
+        mv "$WORK_DIR/sukisu/bzImage" "$WORK_DIR/sukisu/kernel"
+    elif [ "$ARCH" = "arm64" ]; then
+        mv "$WORK_DIR/sukisu/Image" "$WORK_DIR/sukisu/kernel"
+    fi
+    echo "Integrate SuKiSU"
+    mv "$WORK_DIR/wsa/$ARCH/Tools/kernel" "$WORK_DIR/wsa/$ARCH/Tools/kernel_origin"
+    cp "$WORK_DIR/sukisu/kernel" "$WORK_DIR/wsa/$ARCH/Tools/kernel"
 fi
 echo -e "done\n"
 if [ "$HAS_GAPPS" ]; then
@@ -620,8 +593,10 @@ if [[ "$ROOT_SOL" = "none" ]]; then
     name1=""
 elif [ "$ROOT_SOL" = "magisk" ]; then
     name1="-with-magisk-$MAGISK_VERSION_NAME($MAGISK_VERSION_CODE)-$MAGISK_VER"
-elif [ "$ROOT_SOL" = "kernelsu" ] || [ "$ROOT_SOL" = "sukisu" ] || [ "$ROOT_SOL" = "apatch" ]; then
-    name1="-with-$ROOT_SOL-$KERNELSU_VER"
+elif [ "$ROOT_SOL" = "kernelsu" ]; then
+    name1="-with-kernelsu-v3.2.5"
+elif [ "$ROOT_SOL" = "sukisu" ]; then
+    name1="-with-sukisu-v4.1.3"
 fi
 if [ -z "$HAS_GAPPS" ]; then
     name2="-NoGApps"
