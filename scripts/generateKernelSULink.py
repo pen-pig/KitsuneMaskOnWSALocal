@@ -103,7 +103,7 @@ except Exception as e:
 print("No WSA kernel found in GitHub releases. Trying custom kernel...", flush=True)
 found = False
 for f in sorted(download_dir.iterdir()):
-    if f.is_file() and f.name.startswith("kernel-WSA-") and f.name.endswith(".zip"):
+    if f.is_file() and f.name.startswith(f"kernel-WSA-{abi_map[arch]}-") and f.name.endswith(".zip"):
         print(f"Found custom kernel: {f.name}", flush=True)
         if f.resolve() != target.resolve():
             f.rename(target)

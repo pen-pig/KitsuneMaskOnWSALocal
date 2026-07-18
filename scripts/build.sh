@@ -441,7 +441,11 @@ if [ -z ${OFFLINE+x} ]; then
         fi
         if [ "$KSU_FAILED" ] && [ "$AUTO_KERNEL" ]; then
             echo "Auto-creating custom kernel from WSABuilds..."
-            KSU_WSABUILDS_URL="https://github.com/MustardChef/WSABuilds/releases/download/Windows_11_2407.40000.4.0_LTS_7_HOTFIX_1/WSA_2407.40000.4.0_x64_Release-Nightly-with-KernelSU-v2.1.2-MindTheGapps-13.0-RemovedAmazon.7z"
+            if [ "$ARCH" = "x64" ]; then
+                KSU_WSABUILDS_URL="https://github.com/MustardChef/WSABuilds/releases/download/Windows_11_2407.40000.4.0_LTS_7_HOTFIX_1/WSA_2407.40000.4.0_x64_Release-Nightly-with-KernelSU-v2.1.2-MindTheGapps-13.0-RemovedAmazon.7z"
+            else
+                KSU_WSABUILDS_URL="https://github.com/MustardChef/WSABuilds/releases/download/Windows_11_2407.40000.4.0_LTS_7_arm64/WSA_2407.40000.4.0_arm64_Release-Nightly-with-KernelSU-v1.0.5-MindTheGapps-13.0-RemovedAmazon.7z"
+            fi
             aria2c --no-conf -x4 -s4 -c -R -m0 -d"$DOWNLOAD_DIR" -o"wsa-kernel-temp.7z" "$KSU_WSABUILDS_URL" || abort "Failed to download kernel from WSABuilds"
             mkdir -p "$DOWNLOAD_DIR/kernel-extract"
             7z x "$DOWNLOAD_DIR/wsa-kernel-temp.7z" -o"$DOWNLOAD_DIR/kernel-extract" "*/Tools/kernel" -y || abort "Failed to extract kernel"
